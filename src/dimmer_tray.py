@@ -594,11 +594,11 @@ class SliderWindow(Gtk.Window):
         warm_box.pack_start(wb_label, False, False, 0)
         
         # Calculate initial slider pos from Kelvin
-        # Range: 6500 (0%) -> 2000 (100%)
-        # Value = (6500 - Temp) / (6500 - 2000) * 100
+        # Range: 2000K (0%, Left, More Warm) -> 6500K (100%, Right, Less Warm)
+        # Value = (Temp - 2000) / (6500 - 2000) * 100
         current_k = self.tray_app.warm_level
         if current_k == 0: current_k = 6500
-        slider_val = ((6500 - current_k) / 4500) * 100
+        slider_val = ((current_k - 2000) / 4500) * 100
         slider_val = max(0, min(100, slider_val))
         
         self.warm_adj = Gtk.Adjustment(value=slider_val, lower=0, upper=100, step_increment=1, page_increment=10, page_size=0)
@@ -606,9 +606,9 @@ class SliderWindow(Gtk.Window):
         self.warm_scale.set_draw_value(True)
         self.warm_scale.set_value_pos(Gtk.PositionType.TOP)
         self.warm_scale.get_style_context().add_class("thick-slider")
-        self.warm_scale.set_inverted(True)  # Invert: left=warm, right=cool
-        self.warm_scale.add_mark(100, Gtk.PositionType.BOTTOM, "More Warm")
-        self.warm_scale.add_mark(0, Gtk.PositionType.BOTTOM, "Less Warm")
+        # Removing inverted so fill is Left->Right
+        self.warm_scale.add_mark(0, Gtk.PositionType.BOTTOM, "More Warm")
+        self.warm_scale.add_mark(100, Gtk.PositionType.BOTTOM, "Less Warm")
         self.warm_scale.connect("value-changed", self.on_warm_changed)
         self.warm_scale.connect("format-value", self.format_warm_value)
         warm_box.pack_start(self.warm_scale, False, False, 0)
@@ -911,11 +911,11 @@ class SliderWindow(Gtk.Window):
             return
             
         # Slider is 0-100% Warmth
-        # 0% = 6500K, 100% = 2000K
+        # New Logic: 0 (Left/More Warm) => 2000K. 100 (Right/Less Warm) => 6500K.
         slider_val = self.warm_adj.get_value()
         
-        # Temp = 6500 - (slider * 45) -> 4500 range / 100 = 45
-        temp = 6500 - (slider_val * 45)
+        # Temp = 2000 + (val * 45)
+        temp = 2000 + (slider_val * 45)
         # Snap to 100s
         temp = int(round(temp / 100) * 100)
         
@@ -930,7 +930,8 @@ class SliderWindow(Gtk.Window):
     
     def format_warm_value(self, scale, value):
         """Format warm slider value for display as Kelvin."""
-        temp = 6500 - (value * 45)
+        # 0 -> 2000, 100 -> 6500
+        temp = 2000 + (value * 45)
         return f"{int(temp)}K"
 
     def on_preset_click(self, widget, pid):
@@ -961,8 +962,8 @@ class SliderWindow(Gtk.Window):
         self.dim_val_label.set_label(f"{100 - (d_lvl * 5)}%")
         
         # Update warm slider. Temp -> 0-100
-        # Val = (6500 - Temp) / 45
-        slider_val = (6500 - w_temp) / 45
+        # Val = (Temp - 2000) / 45
+        slider_val = (w_temp - 2000) / 45
         self.warm_adj.set_value(slider_val)
         self.warm_val_label.set_label(f"{w_temp}K")
         
