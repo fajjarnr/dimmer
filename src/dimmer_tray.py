@@ -23,6 +23,9 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
 DIMMER_BINARY = os.path.join(PROJECT_ROOT, 'bin', 'dimmer_passthrough')
 
+# Icon path
+ICON_PATH = os.path.join(SCRIPT_DIR, 'assets', 'dimmer.svg')
+
 # Config file path
 CONFIG_DIR = os.path.expanduser('~/.config/dimmer')
 CONFIG_FILE = os.path.join(CONFIG_DIR, 'config.json')
@@ -33,7 +36,6 @@ app = None
 # Initialize notification system
 Notify.init("Dimmer")
 
-# Level descriptions for 5-level system (20% steps)
 # Level descriptions for 20-level system (5% steps)
 # We won't map every single level to a name, just key ones for the menu
 # 0 = Off, 20 = 100% Dark (Ultra)
@@ -97,7 +99,7 @@ class DimmerTray:
         # Create the indicator
         self.indicator = AppIndicator3.Indicator.new(
             "dimmer-tray",
-            "display-brightness-symbolic",  # Use system icon
+            ICON_PATH,  # Use custom eye icon
             AppIndicator3.IndicatorCategory.APPLICATION_STATUS
         )
         self.indicator.set_status(AppIndicator3.IndicatorStatus.ACTIVE)
@@ -347,7 +349,8 @@ class DimmerTray:
         
         if level == 0:
             self.status_item.set_label("Status: Off")
-            self.indicator.set_icon_full("display-brightness-symbolic", "Dimmer Off")
+            # Always use custom eye icon
+            self.indicator.set_icon_full(ICON_PATH, "Dimmer Off")
             print("[DEBUG] Dimmer turned off")
             if notify:
                 self.show_notification("🔆 Dimmer", "Off - Full brightness")
@@ -373,13 +376,8 @@ class DimmerTray:
                 print(f"[ERROR] Failed to start dimmer: {e}")
                 return
             
-            # Update icon based on level (20 levels)
-            if level <= 7:
-                self.indicator.set_icon_full("display-brightness-high-symbolic", f"Dimmer {pct}%")
-            elif level <= 14:
-                self.indicator.set_icon_full("display-brightness-medium-symbolic", f"Dimmer {pct}%")
-            else:
-                self.indicator.set_icon_full("display-brightness-low-symbolic", f"Dimmer {pct}%")
+            # Use custom eye icon, desc only changes
+            self.indicator.set_icon_full(ICON_PATH, f"Dimmer {pct}%")
             
             if notify:
                 self.show_notification("🌙 Dimmer", level_name)
