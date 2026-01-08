@@ -768,20 +768,39 @@ class SliderWindow(Gtk.Window):
             .sidebar { background-color: #008080; color: white; }
             .content-area { background-color: #ffffff; }
             
-            /* Sidebar Buttons */
+            /* Sidebar Buttons - Match CareUEyes style */
             .nav-button {
+                background-image: none;
                 background-color: transparent;
-                color: #e0f2f1;
+                color: white;
                 border: none;
                 border-radius: 0;
-                padding: 12px 20px;
-                font-weight: bold;
+                padding: 15px 20px;
+                font-weight: 600;
+                font-size: 14px;
                 text-shadow: none;
                 box-shadow: none;
+                -gtk-icon-shadow: none;
+            }
+            .nav-button label {
+                color: white;
+            }
+            .nav-button image {
+                color: white;
+                -gtk-icon-style: symbolic;
             }
             .nav-button:checked {
+                background-image: none;
                 background-color: #ffffff;
                 color: #009688;
+                border-radius: 0;
+            }
+            .nav-button:checked label {
+                color: #009688;
+            }
+            .nav-button:checked image {
+                color: #009688;
+                -gtk-icon-style: symbolic;
             }
             .nav-button:hover:not(:checked) {
                 background-color: #00695c;
