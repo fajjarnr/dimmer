@@ -498,237 +498,432 @@ class DimmerTray:
 
 
 class SliderWindow(Gtk.Window):
-    """Slider window for fine-grained brightness control."""
+    """Modern UI Slider window matching CareUEyes design."""
     
     def __init__(self, tray_app):
         super().__init__(title="Dimmer Control")
         self.tray_app = tray_app
         
-        self.set_default_size(450, 380)
+        self.set_default_size(800, 520)
         self.set_position(Gtk.WindowPosition.CENTER)
         self.set_keep_above(True)
         self.set_resizable(False)
         
-        # Apply dark theme
+        # Apply custom theme
         self.apply_css()
         
-        # Main container
-        main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
-        main_box.set_margin_top(20)
-        main_box.set_margin_bottom(20)
-        main_box.set_margin_start(25)
-        main_box.set_margin_end(25)
-        self.add(main_box)
+        # Main layout container (Horizontal: Sidebar | Content)
+        main_hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
+        self.add(main_hbox)
         
-        # ========== DIMMER SECTION ==========
-        dimmer_title = Gtk.Label()
-        dimmer_title.set_markup("<span size='large' weight='bold'>🌙 Dimmer (Brightness)</span>")
-        main_box.pack_start(dimmer_title, False, False, 0)
+        # ========== SIDEBAR (Left) ==========
+        self.sidebar = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        self.sidebar.set_size_request(180, -1)
+        self.sidebar.get_style_context().add_class("sidebar")
+        main_hbox.pack_start(self.sidebar, False, False, 0)
         
-        # Dimmer status label
-        self.dimmer_status = Gtk.Label()
-        self.update_dimmer_status()
-        main_box.pack_start(self.dimmer_status, False, False, 2)
+        # Logo area
+        logo_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        logo_box.set_margin_top(20)
+        logo_box.set_margin_bottom(20)
+        logo_box.set_margin_start(15)
         
-        # Dimmer Slider - 5 levels (20% steps)
-        self.dimmer_adjustment = Gtk.Adjustment(
-            value=self.tray_app.current_level,
-            lower=0,
-            upper=5,
-            step_increment=1,
-            page_increment=1,
-            page_size=0
-        )
+        logo_icon = Gtk.Image.new_from_icon_name("display-brightness-symbolic", Gtk.IconSize.LARGE_TOOLBAR)
+        logo_label = Gtk.Label(label="CareUEyes") # Using the requested name
+        logo_label.set_markup("<span size='large' weight='bold' color='white'>DimmerEye</span>")
         
-        self.dimmer_slider = Gtk.Scale(
-            orientation=Gtk.Orientation.HORIZONTAL,
-            adjustment=self.dimmer_adjustment
-        )
-        self.dimmer_slider.set_digits(0)
-        self.dimmer_slider.set_draw_value(True)
-        self.dimmer_slider.set_value_pos(Gtk.PositionType.RIGHT)
+        logo_box.pack_start(logo_icon, False, False, 0)
+        logo_box.pack_start(logo_label, False, False, 0)
+        self.sidebar.pack_start(logo_box, False, False, 0)
         
-        # Add marks for dimmer levels
-        for i in range(6):
-            label = "Off" if i == 0 else f"{i*20}%"
-            self.dimmer_slider.add_mark(i, Gtk.PositionType.BOTTOM, label)
+        # Navigation Buttons
+        self.nav_stack = Gtk.Stack()
+        self.nav_stack.set_transition_type(Gtk.StackTransitionType.SLIDE_UP_DOWN)
         
-        self.dimmer_slider.connect("value-changed", self.on_dimmer_changed)
-        main_box.pack_start(self.dimmer_slider, False, False, 5)
+        bg_group = None
+        self.nav_buttons = {}
         
-        # Dimmer preset buttons
-        dimmer_btn_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-        dimmer_btn_box.set_halign(Gtk.Align.CENTER)
+        nav_items = [
+            ("Display", "video-display-symbolic", "display_page"),
+            ("BreakTimer", "alarm-symbolic", "break_page"),
+            ("Focus", "view-fullscreen-symbolic", "placeholder_page"),
+            ("Options", "emblem-system-symbolic", "placeholder_page"),
+            ("About", "help-about-symbolic", "placeholder_page"),
+        ]
         
-        for label, level in [("Off", 0), ("Light", 1), ("Dark", 3), ("Ultra", 5)]:
-            btn = Gtk.Button(label=label)
-            btn.connect("clicked", self.on_dimmer_preset, level)
-            dimmer_btn_box.pack_start(btn, False, False, 0)
+        for label, icon, page_id in nav_items:
+            btn = Gtk.RadioButton.new_with_label_from_widget(bg_group, f"  {label}")
+            btn.set_mode(False) # Make it look like a button
+            btn.get_style_context().add_class("nav-button")
+            
+            # Add icon
+            image = Gtk.Image.new_from_icon_name(icon, Gtk.IconSize.MENU)
+            btn.set_image(image)
+            btn.set_always_show_image(True)
+            
+            if bg_group is None:
+                bg_group = btn
+                btn.set_active(True)
+            
+            btn.connect("toggled", self.on_nav_toggled, page_id)
+            self.sidebar.pack_start(btn, False, False, 0)
+            self.nav_buttons[page_id] = btn
+            
+        # ========== CONTENT (Right) ==========
+        content_area = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        content_area.get_style_context().add_class("content-area")
+        main_hbox.pack_start(content_area, True, True, 0)
         
-        main_box.pack_start(dimmer_btn_box, False, False, 5)
+        # Title Bar / Header (within content area)
+        header_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+        header_box.set_margin_top(10)
+        header_box.set_margin_end(10)
         
-        # Separator
-        main_box.pack_start(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL), False, False, 10)
+        close_btn = Gtk.Button.new_from_icon_name("window-close-symbolic", Gtk.IconSize.MENU)
+        close_btn.get_style_context().add_class("flat-button")
+        close_btn.connect("clicked", self.on_hide_window)
         
-        # ========== WARM FILTER SECTION ==========
-        warm_title = Gtk.Label()
-        warm_title.set_markup("<span size='large' weight='bold'>🔥 Warm Filter (Blue Light)</span>")
-        main_box.pack_start(warm_title, False, False, 0)
+        header_box.pack_end(close_btn, False, False, 0)
+        content_area.pack_start(header_box, False, False, 0)
         
-        # Warm status label
-        self.warm_status = Gtk.Label()
-        self.update_warm_status()
-        main_box.pack_start(self.warm_status, False, False, 2)
+        # Stack for pages
+        content_area.pack_start(self.nav_stack, True, True, 0)
         
-        # Warm Slider - 5 levels
-        self.warm_adjustment = Gtk.Adjustment(
-            value=self.tray_app.warm_level,
-            lower=0,
-            upper=5,
-            step_increment=1,
-            page_increment=1,
-            page_size=0
-        )
+        # --- PAGE 1: DISPLAY ---
+        self.create_display_page()
         
-        self.warm_slider = Gtk.Scale(
-            orientation=Gtk.Orientation.HORIZONTAL,
-            adjustment=self.warm_adjustment
-        )
-        self.warm_slider.set_digits(0)
-        self.warm_slider.set_draw_value(True)
-        self.warm_slider.set_value_pos(Gtk.PositionType.RIGHT)
+        # --- PAGE 2: BREAK TIMER ---
+        self.create_break_page()
         
-        # Add marks for warm levels
-        warm_marks = ["Off", "5500K", "4500K", "3500K", "2700K", "2000K"]
-        for i, label in enumerate(warm_marks):
-            self.warm_slider.add_mark(i, Gtk.PositionType.BOTTOM, label)
-        
-        self.warm_slider.connect("value-changed", self.on_warm_changed)
-        main_box.pack_start(self.warm_slider, False, False, 5)
-        
-        # Warm preset buttons
-        warm_btn_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-        warm_btn_box.set_halign(Gtk.Align.CENTER)
-        
-        for label, level in [("Off", 0), ("Warm", 2), ("Sunset", 4), ("Candle", 5)]:
-            btn = Gtk.Button(label=label)
-            btn.connect("clicked", self.on_warm_preset, level)
-            warm_btn_box.pack_start(btn, False, False, 0)
-        
-        main_box.pack_start(warm_btn_box, False, False, 5)
-        
-        # ========== ACTION BUTTONS ==========
-        action_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-        action_box.set_halign(Gtk.Align.END)
-        action_box.set_margin_top(10)
-        
-        hide_btn = Gtk.Button(label="Hide to Tray")
-        hide_btn.connect("clicked", self.on_hide)
-        action_box.pack_end(hide_btn, False, False, 0)
-        
-        main_box.pack_end(action_box, False, False, 0)
+        # --- PLACEHOLDER PAGE ---
+        placeholder = Gtk.Label(label="Feature coming soon...")
+        self.nav_stack.add_named(placeholder, "placeholder_page")
         
         # Handle window close
         self.connect("delete-event", self.on_delete)
-    
-    def apply_css(self):
-        """Apply custom CSS styling."""
-        css_provider = Gtk.CssProvider()
-        css_provider.load_from_data(b"""
-            window {
-                background-color: #2d2d2d;
-            }
-            label {
-                color: #ffffff;
-            }
-            scale {
-                min-height: 30px;
-            }
-            scale trough {
-                min-height: 8px;
-                background-color: #404040;
-                border-radius: 4px;
-            }
-            scale highlight {
-                background: linear-gradient(to right, #4a90d9, #64b5f6);
-                border-radius: 4px;
-            }
-            scale slider {
-                min-width: 20px;
-                min-height: 20px;
-                background-color: #ffffff;
-                border-radius: 50%;
-            }
-            button {
-                padding: 8px 16px;
-                background-color: #404040;
-                color: #ffffff;
-                border: none;
-                border-radius: 6px;
-            }
-            button:hover {
-                background-color: #505050;
-            }
-            button:active {
-                background-color: #606060;
-            }
-        """)
         
-        screen = self.get_screen()
+        # Update timer label
+        GLib.timeout_add(1000, self.update_timer_ui)
+    
+    def create_display_page(self):
+        page = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=20)
+        page.set_margin_start(40)
+        page.set_margin_end(40)
+        page.set_margin_top(10)
+        page.set_margin_bottom(20)
+        
+        # 1. Warm Slider
+        warm_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
+        
+        wb_label = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+        wb_label.pack_start(Gtk.Label(label="Color Temperature"), False, False, 0)
+        self.warm_val_label = Gtk.Label(label="6500K")
+        self.warm_val_label.get_style_context().add_class("value-tag")
+        wb_label.pack_end(self.warm_val_label, False, False, 0)
+        warm_box.pack_start(wb_label, False, False, 0)
+        
+        self.warm_adj = Gtk.Adjustment(value=self.tray_app.warm_level, lower=0, upper=5, step_increment=1, page_increment=1, page_size=0)
+        self.warm_scale = Gtk.Scale(orientation=Gtk.Orientation.HORIZONTAL, adjustment=self.warm_adj)
+        self.warm_scale.set_draw_value(False)
+        self.warm_scale.get_style_context().add_class("thick-slider")
+        self.warm_scale.add_mark(0, Gtk.PositionType.BOTTOM, "Less Warm")
+        self.warm_scale.add_mark(5, Gtk.PositionType.BOTTOM, "More Warm")
+        self.warm_scale.connect("value-changed", self.on_warm_changed)
+        warm_box.pack_start(self.warm_scale, False, False, 0)
+        
+        page.pack_start(warm_box, False, False, 0)
+        
+        # 2. Brightness Slider
+        dim_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
+        
+        db_label = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+        db_label.pack_start(Gtk.Label(label="Brightness"), False, False, 0)
+        self.dim_val_label = Gtk.Label(label="100%")
+        self.dim_val_label.get_style_context().add_class("value-tag")
+        db_label.pack_end(self.dim_val_label, False, False, 0)
+        dim_box.pack_start(db_label, False, False, 0)
+        
+        self.dim_adj = Gtk.Adjustment(value=self.tray_app.current_level, lower=0, upper=5, step_increment=1, page_increment=1, page_size=0)
+        self.dim_scale = Gtk.Scale(orientation=Gtk.Orientation.HORIZONTAL, adjustment=self.dim_adj)
+        self.dim_scale.set_draw_value(False)
+        self.dim_scale.get_style_context().add_class("thick-slider")
+        self.dim_scale.add_mark(0, Gtk.PositionType.BOTTOM, "More Bright")
+        self.dim_scale.add_mark(5, Gtk.PositionType.BOTTOM, "Less Bright")
+        self.dim_scale.connect("value-changed", self.on_dimmer_changed)
+        dim_box.pack_start(self.dim_scale, False, False, 0)
+        
+        page.pack_start(dim_box, False, False, 0)
+        
+        # 3. Day/Night & Toggle
+        toggle_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        toggle_box.set_halign(Gtk.Align.CENTER)
+        
+        toggle_label = Gtk.Label(label="Enable day and night feature")
+        toggle_label.get_style_context().add_class("grey-text")
+        
+        self.dn_switch = Gtk.Switch()
+        self.dn_switch.set_active(True) # Dummy implementation
+        
+        toggle_box.pack_start(toggle_label, False, False, 0)
+        toggle_box.pack_start(self.dn_switch, False, False, 0)
+        
+        page.pack_start(toggle_box, False, False, 10)
+        
+        # 4. Preset Grid (FlowBox)
+        flow = Gtk.FlowBox()
+        flow.set_valign(Gtk.Align.START)
+        flow.set_max_children_per_line(4)
+        flow.set_selection_mode(Gtk.SelectionMode.NONE)
+        flow.set_column_spacing(10)
+        flow.set_row_spacing(10)
+        
+        # Map profiles to buttons
+        presets = [
+            ("Pause", 0, 0, "off"), # Off
+            ("Health", 1, 2, "work"), # Work (Health)
+            ("Game", 0, 1, "gaming"),
+            ("Movie", 2, 0, "movie"),
+            ("Office", 2, 2, "work"), # Similar to Work
+            ("Editing", 1, 1, "gaming"), # Bright
+            ("Reading", 2, 3, "reading"),
+            ("Custom", 0, 0, None) # Placeholder
+        ]
+        
+        for label, d_lvl, w_lvl, prof_id in presets:
+            btn = Gtk.Button(label=label)
+            btn.get_style_context().add_class("preset-btn")
+            btn.set_size_request(80, 35)
+            if prof_id == "work": # Highlight Health/Work as example
+                 btn.get_style_context().add_class("preset-active")
+            
+            btn.connect("clicked", self.on_preset_click, d_lvl, w_lvl)
+            flow.add(btn)
+            
+        page.pack_start(flow, False, False, 0)
+        
+        # 5. Description
+        desc_label = Gtk.Label(label="Slightly lower color temperature and brightness,\ndarker than office mode, suitable for people who are sensitive to light")
+        desc_label.set_justify(Gtk.Justification.CENTER)
+        desc_label.get_style_context().add_class("grey-text")
+        desc_label.set_max_width_chars(50)
+        desc_label.set_line_wrap(True)
+        
+        page.pack_start(desc_label, False, False, 10)
+        
+        self.nav_stack.add_named(page, "display_page")
+        
+    def create_break_page(self):
+        page = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=20)
+        page.get_style_context().add_class("teal-bg-top") # Special background?
+        
+        # Top Section (Teal Background with Timer)
+        timer_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        timer_box.set_size_request(-1, 200)
+        timer_box.get_style_context().add_class("timer-container")
+        
+        lbl_next = Gtk.Label(label="Next break in:")
+        lbl_next.get_style_context().add_class("timer-sublabel")
+        
+        self.timer_display = Gtk.Label(label="00:20:00")
+        self.timer_display.get_style_context().add_class("timer-digits")
+        
+        controls_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=20)
+        controls_box.set_halign(Gtk.Align.CENTER)
+        
+        btn_coffee = Gtk.Button.new_from_icon_name("media-playback-pause-symbolic", Gtk.IconSize.BUTTON)
+        btn_stop = Gtk.Button(label="STOP")
+        btn_stop.get_style_context().add_class("orange-btn")
+        btn_stop.set_size_request(120, 40)
+        btn_stop.connect("clicked", self.on_stop_timer)
+        
+        controls_box.pack_start(Gtk.Image.new_from_icon_name("weather-clear-night-symbolic", Gtk.IconSize.DND), False, False, 0) # Coffee icon placeholder
+        controls_box.pack_start(btn_stop, False, False, 0)
+        controls_box.pack_start(btn_coffee, False, False, 0)
+        
+        timer_box.pack_start(lbl_next, True, True, 0)
+        timer_box.pack_start(self.timer_display, True, True, 0)
+        timer_box.pack_start(controls_box, True, True, 20)
+        
+        page.pack_start(timer_box, False, False, 0)
+        
+        # Bottom Section (Settings)
+        mod_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=15)
+        mod_box.set_margin_start(40)
+        mod_box.set_margin_end(40)
+        mod_box.set_margin_top(20)
+        
+        # Toggle
+        row1 = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+        row1.pack_start(Gtk.Label(label="Break Reminder Enabled"), False, False, 0)
+        self.break_switch = Gtk.Switch()
+        self.break_switch.set_active(self.tray_app.break_enabled)
+        self.break_switch.connect("state-set", self.on_break_toggled)
+        row1.pack_end(self.break_switch, False, False, 0)
+        mod_box.pack_start(row1, False, False, 0)
+        
+        # Interval
+        row2 = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+        row2.pack_start(Gtk.Label(label="Every"), False, False, 0)
+        self.spin_every = Gtk.SpinButton.new_with_range(5, 120, 5)
+        self.spin_every.set_value(20)
+        row2.pack_end(Gtk.Label(label=" Minutes"), False, False, 0)
+        row2.pack_end(self.spin_every, False, False, 10)
+        mod_box.pack_start(row2, False, False, 0)
+        
+        page.pack_start(mod_box, True, True, 0)
+        
+        self.nav_stack.add_named(page, "break_page")
+
+    def apply_css(self):
+        css = b"""
+            /* Main Window */
+            window { background-color: #ffffff; }
+            .sidebar { background-color: #008080; color: white; }
+            .content-area { background-color: #ffffff; }
+            
+            /* Sidebar Buttons */
+            .nav-button {
+                background-color: transparent;
+                color: #e0f2f1;
+                border: none;
+                border-radius: 0;
+                padding: 12px 20px;
+                font-weight: bold;
+                text-shadow: none;
+                box-shadow: none;
+            }
+            .nav-button:checked {
+                background-color: #ffffff;
+                color: #008080;
+            }
+            .nav-button:hover:not(:checked) {
+                background-color: #00695c;
+            }
+            
+            /* Sliders */
+            .thick-slider trough {
+                min-height: 8px;
+                border-radius: 4px;
+                background-color: #e0e0e0;
+            }
+            .thick-slider highlight {
+                min-height: 8px;
+                border-radius: 4px;
+                background-color: #009688; /* Teal */
+            }
+            .thick-slider slider {
+                min-width: 24px; min-height: 24px;
+                border-radius: 50%;
+                background-color: #ffffff;
+                border: 2px solid #009688;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            }
+            
+            /* Presets */
+            .preset-btn {
+                background-image: none;
+                background-color: #e0f2f1;
+                color: #00695c;
+                border: none;
+                border-radius: 4px;
+                box-shadow: none;
+            }
+            .preset-btn:hover { background-color: #b2dfdb; }
+            .preset-active { 
+                background-color: #009688; 
+                color: white; 
+            }
+            
+            /* Timer Page */
+            .timer-container {
+                background-color: #009688;
+                color: white;
+            }
+            .timer-digits {
+                font-size: 64px;
+                font-weight: bold;
+                color: white;
+            }
+            .timer-sublabel { font-size: 16px; color: #b2dfdb; }
+            
+            .orange-btn {
+                background-color: #ff9800;
+                color: white;
+                font-weight: bold;
+                border-radius: 20px;
+                border: none;
+            }
+            .orange-btn:hover { background-color: #f57c00; }
+            
+            .value-tag {
+                background-color: #009688;
+                color: white;
+                border-radius: 4px;
+                padding: 2px 6px;
+                font-size: 11px;
+            }
+            .grey-text { color: #888888; }
+            .flat-button { border: none; background: transparent; }
+        """
+        provider = Gtk.CssProvider()
+        provider.load_from_data(css)
         Gtk.StyleContext.add_provider_for_screen(
-            screen,
-            css_provider,
-            Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+            self.get_screen(), provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
         )
+
+    def on_nav_toggled(self, btn, page_name):
+        if btn.get_active():
+            self.nav_stack.set_visible_child_name(page_name)
     
-    def update_dimmer_status(self):
-        """Update the dimmer status label text."""
-        level = self.tray_app.current_level
-        if level == 0:
-            text = "No dimming (Full brightness)"
-        else:
-            text = LEVEL_NAMES.get(level, f"{level * 20}%")
-        self.dimmer_status.set_markup(f"<span size='medium'>{text}</span>")
-    
-    def update_warm_status(self):
-        """Update the warm filter status label text."""
-        level = self.tray_app.warm_level
-        if level == 0:
-            text = "Off - Neutral colors (6500K)"
-        else:
-            text = WARM_NAMES.get(level, f"Level {level}")
-        self.warm_status.set_markup(f"<span size='medium'>{text}</span>")
-    
-    def on_dimmer_changed(self, widget):
-        """Handle dimmer slider value change."""
-        level = int(self.dimmer_adjustment.get_value())
-        self.tray_app.set_dimmer_level(level)
-        self.update_dimmer_status()
-    
-    def on_dimmer_preset(self, widget, level):
-        """Handle dimmer preset button click."""
-        self.dimmer_adjustment.set_value(level)
-    
-    def on_warm_changed(self, widget):
-        """Handle warm slider value change."""
-        level = int(self.warm_adjustment.get_value())
-        self.tray_app.set_warm_level(level)
-        self.update_warm_status()
-    
-    def on_warm_preset(self, widget, level):
-        """Handle warm preset button click."""
-        self.warm_adjustment.set_value(level)
-    
-    def on_hide(self, widget):
-        """Hide window to tray."""
+    def on_hide_window(self, widget):
         self.hide()
         self.tray_app.on_slider_closed()
-        self.destroy()
-    
+        return True
+        
     def on_delete(self, widget, event):
-        """Handle window close button."""
-        self.tray_app.on_slider_closed()
-        return False  # Allow window to be destroyed
+        self.on_hide_window(widget)
+        return True
+
+    def on_dimmer_changed(self, widget):
+        val = int(self.dim_adj.get_value())
+        if self.tray_app.current_level != val:
+            self.tray_app.set_dimmer_level(val)
+            pct = 100 - (val * 20)
+            self.dim_val_label.set_label(f"{pct}%")
+            
+    def on_warm_changed(self, widget):
+        val = int(self.warm_adj.get_value())
+        if self.tray_app.warm_level != val:
+            self.tray_app.set_warm_level(val)
+            temps = ["6500K", "5500K", "4500K", "3500K", "2700K", "2000K"]
+            self.warm_val_label.set_label(temps[val])
+
+    def on_preset_click(self, widget, d_lvl, w_lvl):
+        # Update app
+        self.tray_app.set_dimmer_level(d_lvl)
+        self.tray_app.set_warm_level(w_lvl)
+        # Update sliders
+        self.dim_adj.set_value(d_lvl)
+        self.warm_adj.set_value(w_lvl)
+        
+    def on_break_toggled(self, switch, state):
+        self.tray_app.break_enabled = state
+        self.tray_app.toggle_break_reminder(None) # Pass none or handle appropriately in tray_app
+        
+    def on_stop_timer(self, widget):
+        # Just reset to 20 mins for visual, logic is in tray app
+        self.tray_app.stop_break_timer()
+        self.break_switch.set_active(False)
+
+    def update_timer_ui(self):
+        # Simple countdown logic for visual if timer is active
+        # In a real app, query tray_app for remaining time
+        if self.tray_app.break_enabled:
+            # Fake decrement for demo
+            self.timer_display.set_markup("<span font_features='tnum'>00:19:59</span>")
+        else:
+            self.timer_display.set_label("00:20:00")
+        return True
 
 
 def main():
@@ -739,7 +934,7 @@ def main():
     if not os.path.isfile(DIMMER_BINARY):
         print(f"Error: Dimmer binary not found at {DIMMER_BINARY}")
         print("Please compile it first with:")
-        print("  gcc -o dimmer_passthrough dimmer_passthrough.c -lX11 -lXext")
+        print("  gcc -o bin/dimmer_passthrough c_src/dimmer_passthrough.c -lX11 -lXext")
         return 1
     
     # Check if binary is executable
