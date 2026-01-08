@@ -476,6 +476,7 @@ class SliderWindow(Gtk.Window):
         # Track active profile for styling
         self.current_profile_id = None
         self.preset_buttons = {}
+        self.updating_from_profile = False  # Flag to prevent slider feedback loop
         
         # Apply custom theme
         self.apply_css()
@@ -604,11 +605,14 @@ class SliderWindow(Gtk.Window):
         
         self.warm_adj = Gtk.Adjustment(value=slider_val, lower=0, upper=100, step_increment=1, page_increment=10, page_size=0)
         self.warm_scale = Gtk.Scale(orientation=Gtk.Orientation.HORIZONTAL, adjustment=self.warm_adj)
-        self.warm_scale.set_draw_value(False)
+        self.warm_scale.set_draw_value(True)
+        self.warm_scale.set_value_pos(Gtk.PositionType.TOP)
         self.warm_scale.get_style_context().add_class("thick-slider")
-        self.warm_scale.add_mark(0, Gtk.PositionType.BOTTOM, "Less Warm")
+        self.warm_scale.set_inverted(True)  # Invert: left=warm, right=cool
         self.warm_scale.add_mark(100, Gtk.PositionType.BOTTOM, "More Warm")
+        self.warm_scale.add_mark(0, Gtk.PositionType.BOTTOM, "Less Warm")
         self.warm_scale.connect("value-changed", self.on_warm_changed)
+        self.warm_scale.connect("format-value", self.format_warm_value)
         warm_box.pack_start(self.warm_scale, False, False, 0)
         
         page.pack_start(warm_box, False, False, 0)
@@ -631,11 +635,13 @@ class SliderWindow(Gtk.Window):
         
         self.dim_adj = Gtk.Adjustment(value=curr_pct, lower=0, upper=100, step_increment=5, page_increment=10, page_size=0)
         self.dim_scale = Gtk.Scale(orientation=Gtk.Orientation.HORIZONTAL, adjustment=self.dim_adj)
-        self.dim_scale.set_draw_value(False)
+        self.dim_scale.set_draw_value(True)
+        self.dim_scale.set_value_pos(Gtk.PositionType.TOP)
         self.dim_scale.get_style_context().add_class("thick-slider")
         self.dim_scale.add_mark(0, Gtk.PositionType.BOTTOM, "Less Bright")
         self.dim_scale.add_mark(100, Gtk.PositionType.BOTTOM, "More Bright")
         self.dim_scale.connect("value-changed", self.on_dimmer_changed)
+        self.dim_scale.connect("format-value", self.format_dim_value)
         dim_box.pack_start(self.dim_scale, False, False, 0)
         
         page.pack_start(dim_box, False, False, 0)
@@ -775,7 +781,7 @@ class SliderWindow(Gtk.Window):
             }
             .nav-button:checked {
                 background-color: #ffffff;
-                color: #008080;
+                color: #009688;
             }
             .nav-button:hover:not(:checked) {
                 background-color: #00695c;
@@ -866,23 +872,27 @@ class SliderWindow(Gtk.Window):
         return True
 
     def on_dimmer_changed(self, widget):
+        if self.updating_from_profile:
+            return
+            
         # Slider is 0-100% Brightness
         # App expects Level 0 (100% bright) to 20 (0% bright)
         slider_val = int(self.dim_adj.get_value())
         
         # Percentage of brightness: 100% -> Level 0. 0% -> Level 20.
-        # inverted: dim_pct = 100 - slider_val
-        # level = dim_pct / 5
         dim_pct = 100 - slider_val
-        level = dim_pct / 5
+        level = int(dim_pct / 5)
         
         # Only apply if changed
-        if abs(self.tray_app.current_level - level) >= 0.1: # float tolerance
-            self.tray_app.set_dimmer_level(int(level))
+        if self.tray_app.current_level != level:
+            self.tray_app.set_dimmer_level(level)
             self.dim_val_label.set_label(f"{slider_val}%")
             self.check_profile_match()
             
     def on_warm_changed(self, widget):
+        if self.updating_from_profile:
+            return
+            
         # Slider is 0-100% Warmth
         # 0% = 6500K, 100% = 2000K
         slider_val = self.warm_adj.get_value()
@@ -890,12 +900,21 @@ class SliderWindow(Gtk.Window):
         # Temp = 6500 - (slider * 45) -> 4500 range / 100 = 45
         temp = 6500 - (slider_val * 45)
         # Snap to 100s
-        temp = round(temp / 100) * 100
+        temp = int(round(temp / 100) * 100)
         
         if self.tray_app.warm_level != temp:
-            self.tray_app.set_warm_level(int(temp))
-            self.warm_val_label.set_label(f"{int(temp)}K")
+            self.tray_app.set_warm_level(temp)
+            self.warm_val_label.set_label(f"{temp}K")
             self.check_profile_match()
+    
+    def format_dim_value(self, scale, value):
+        """Format brightness slider value for display."""
+        return f"{int(value)}%"
+    
+    def format_warm_value(self, scale, value):
+        """Format warm slider value for display as Kelvin."""
+        temp = 6500 - (value * 45)
+        return f"{int(temp)}K"
 
     def on_preset_click(self, widget, pid):
         # Set active button styling
@@ -917,13 +936,21 @@ class SliderWindow(Gtk.Window):
         self.tray_app.set_dimmer_level(d_lvl)
         self.tray_app.set_warm_level(w_temp)
         
-        # Update sliders (block signals if possible or let them trigger updates which is fine)
-        self.dim_adj.set_value(100 - (d_lvl * 5))
+        # Block slider signals during update to prevent feedback loop
+        self.updating_from_profile = True
         
-        # Update warm slider. Temp -> 0-100?
+        # Update sliders
+        self.dim_adj.set_value(100 - (d_lvl * 5))
+        self.dim_val_label.set_label(f"{100 - (d_lvl * 5)}%")
+        
+        # Update warm slider. Temp -> 0-100
         # Val = (6500 - Temp) / 45
         slider_val = (6500 - w_temp) / 45
         self.warm_adj.set_value(slider_val)
+        self.warm_val_label.set_label(f"{w_temp}K")
+        
+        # Re-enable slider signals
+        self.updating_from_profile = False
         
     def update_active_button(self, active_pid):
         for pid, btn in self.preset_buttons.items():
