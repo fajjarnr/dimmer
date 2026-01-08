@@ -1,0 +1,11 @@
+[Desktop Entry]
+Name=Dimmer Tray
+Comment=Screen brightness overlay control
+Exec=/home/jay/Projects/dimmer/dimmer_tray.py
+Icon=display-brightness-symbolic
+Terminal=false
+Type=Application
+Categories=Utility;Accessibility;
+Keywords=brightness;dimmer;screen;overlay;
+StartupNotify=false
+X-GNOME-Autostart-enabled=true

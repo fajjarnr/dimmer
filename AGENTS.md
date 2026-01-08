@@ -18,6 +18,8 @@ Brightness control overlay for KDE Plasma (Wayland/XWayland) - similar to CareUE
 ├── dimmer_passthrough             # Compiled binary (5-level, 20% step)
 ├── dimmer_passthrough_20lvl.c     # C source (20-level dimmer)
 ├── dimmer_passthrough_20lvl       # Compiled binary (20-level, 5% step)
+├── dimmer_tray.py                 # System tray app (GTK3/AppIndicator)
+├── dimmer-tray.desktop            # Desktop entry for autostart
 ├── slider_5pct.py                 # GUI slider 5% step (RECOMMENDED)
 ├── slider_20pct.py                # GUI slider 20% step (fast)
 ├── dim_control.sh                 # Command line control script

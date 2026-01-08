@@ -22,8 +22,32 @@ sudo apt install libx11-dev libxext-dev python3-tk
 | `dim_hotkeys.sh` | Control untuk KDE shortcuts |
 | `dimmer_passthrough` | Binary dimmer (5 level, 20% step) |
 | `dimmer_passthrough_20lvl` | Binary dimmer (20 level, 5% step) |
+| `dimmer_tray.py` | **🆕 System Tray App** - berjalan di background |
 
 ## Cara Pakai
+
+### 0. System Tray (RECOMMENDED 🌟)
+
+Aplikasi berjalan di **system tray** sehingga tidak mengganggu dan bisa diakses kapan saja:
+
+```bash
+./dimmer_tray.py
+```
+
+**Fitur:**
+- 🔔 Icon di system tray
+- 🖱️ Klik kanan untuk menu preset cepat (Off, 30%, 50%, 70%, 90%)
+- 🎚️ Slider popup untuk kontrol presisi
+- 🌙 Icon berubah sesuai level brightness
+- 🚀 Bisa autostart saat login
+
+**Setup Autostart:**
+```bash
+# Copy ke autostart folder
+cp dimmer-tray.desktop ~/.config/autostart/
+```
+
+---
 
 ### 1. GUI Slider (Paling Mudah)
 

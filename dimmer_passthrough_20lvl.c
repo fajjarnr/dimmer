@@ -39,8 +39,9 @@ int main(int argc, char *argv[]) {
     if (level < 1) level = 1;
     if (level > 20) level = 20;
     
-    // Convert level to opacity (level 20 = 0xFF000000)
-    unsigned long opacity = (level * 0xFF000000) / 20;
+    // Convert level to opacity (level 20 = 0xFF000000 = fully opaque black)
+    // Use unsigned long long to avoid integer overflow
+    unsigned long opacity = (unsigned long long)level * 0xFF000000ULL / 20ULL;
     
     Atom opacity_atom = XInternAtom(d, "_NET_WM_WINDOW_OPACITY", False);
     XChangeProperty(d, w, opacity_atom, XA_CARDINAL, 32, PropModeReplace, (unsigned char*)&opacity, 1);
