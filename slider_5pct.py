@@ -33,4 +33,9 @@ tk.Button(root, text="50%", command=lambda: slider.set(10)).pack(side='left', pa
 tk.Button(root, text="30%", command=lambda: slider.set(6)).pack(side='left', padx=5, pady=5)
 tk.Button(root, text="70%", command=lambda: slider.set(14)).pack(side='left', padx=5, pady=5)
 
+def on_close():
+    subprocess.run(['pkill','-f','dimmer_passthrough_20lvl'], stderr=subprocess.DEVNULL)
+    root.destroy()
+
+root.protocol("WM_DELETE_WINDOW", on_close)
 root.mainloop()

@@ -1,1 +1,0 @@
-slider_20pct.py
