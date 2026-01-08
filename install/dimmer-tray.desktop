@@ -2,7 +2,7 @@
 [Desktop Entry]
 Name=Dimmer Tray
 Comment=Screen brightness overlay control
-Exec=/home/jay/Projects/dimmer/dimmer_tray.py
+Exec=/home/jay/Projects/dimmer/src/dimmer_tray.py
 Icon=display-brightness-symbolic
 Terminal=false
 Type=Application

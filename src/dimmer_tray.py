@@ -19,7 +19,9 @@ from gi.repository import Gtk, AppIndicator3, GLib, Notify
 
 # Get the directory where this script is located
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-DIMMER_BINARY = os.path.join(SCRIPT_DIR, 'dimmer_passthrough')
+# Binary is in ../bin relative to this script in src/
+PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
+DIMMER_BINARY = os.path.join(PROJECT_ROOT, 'bin', 'dimmer_passthrough')
 
 # Config file path
 CONFIG_DIR = os.path.expanduser('~/.config/dimmer')

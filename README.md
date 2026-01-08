@@ -14,23 +14,33 @@ sudo apt install libx11-dev libxext-dev python3-gi gir1.2-appindicator3-0.1
 
 ## Struktur File
 
-| File                  | Deskripsi                                  |
-|-----------------------|--------------------------------------------|
-| `dimmer_tray.py`      | **🌟 System Tray App** - RECOMMENDED       |
-| `slider_20pct.py`     | GUI Slider 20% step (standalone)           |
-| `slider_5pct.py`      | GUI Slider 5% step (halus)                 |
-| `dim_control.sh`      | Control via command line                   |
-| `dim_hotkeys.sh`      | Control untuk KDE shortcuts                |
-| `dimmer_passthrough`  | Binary dimmer (5 level, 20% step)          |
+```
+dimmer/
+├── bin/
+│   └── dimmer_passthrough      # Compiled binary
+├── src/
+│   ├── dimmer_tray.py          # 🌟 Main App
+│   ├── slider_20pct.py         # Slider legacy
+│   └── slider_5pct.py          # Slider legacy
+├── c_src/
+│   ├── dimmer_passthrough.c    # C Source Code
+│   └── ...
+├── scripts/
+│   ├── dim_control.sh          # CLI helper
+│   └── ...
+├── install/
+│   └── dimmer-tray.desktop     # Desktop entry
+└── README.md
+```
 
 ## Cara Pakai
 
 ### 🌟 System Tray (RECOMMENDED)
 
-Aplikasi berjalan di **system tray** dengan fitur lengkap:
+Aplikasi berjalan di **system tray** dengan fitur lengkap. Jalankan dari folder `src/`:
 
 ```bash
-./dimmer_tray.py
+./src/dimmer_tray.py
 ```
 
 **Fitur Utama:**
@@ -61,7 +71,7 @@ Menggunakan **KDE Night Light** secara native untuk mengurangi blue light:
 
 ```bash
 # Copy ke autostart folder
-cp dimmer-tray.desktop ~/.config/autostart/
+cp install/dimmer-tray.desktop ~/.config/autostart/
 ```
 
 ---
@@ -70,19 +80,17 @@ cp dimmer-tray.desktop ~/.config/autostart/
 
 ```bash
 # 20% step (cepat, 5 level)
-./slider_20pct.py
+./src/slider_20pct.py
 
 # 5% step (halus, 20 level)
-./slider_5pct.py
+./src/slider_5pct.py
 ```
 
 ## Command Line
 
 ```bash
-./dim_control.sh 1    # Light (20%)
-./dim_control.sh 3    # Dark (60%)
-./dim_control.sh 5    # Ultra (100% - hitam)
-./dim_control.sh off  # Matikan dimmer
+./scripts/dim_control.sh 1    # Light (20%)
+./scripts/dim_control.sh 3    # Dark (60%)
 ```
 
 ## Config File
@@ -107,8 +115,7 @@ Format:
 Jika ingin mengkompilasi ulang binary:
 
 ```bash
-gcc -o dimmer_passthrough dimmer_passthrough.c -lX11 -lXext
-gcc -o dimmer_passthrough_20lvl dimmer_passthrough_20lvl.c -lX11 -lXext
+gcc -o bin/dimmer_passthrough c_src/dimmer_passthrough.c -lX11 -lXext
 ```
 
 ## Catatan
