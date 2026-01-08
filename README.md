@@ -14,7 +14,7 @@ sudo apt install libx11-dev libxext-dev python3-gi gir1.2-appindicator3-0.1
 
 ## Struktur File
 
-```
+```text
 dimmer/
 ├── bin/
 │   └── dimmer_passthrough      # Compiled binary
@@ -49,10 +49,24 @@ Aplikasi berjalan di **system tray** dengan fitur lengkap. Jalankan dari folder 
 - 🖱️ Klik kanan untuk menu preset:
   - **Dimmer**: Off, 20%, 40%, 60%, 80%, 100%
   - **Warm Filter**: Off, 5500K, 4500K, 3500K, 2700K, 2000K (via KDE Night Light)
+  - **Profiles**: Gaming, Work, Reading, Movie, Night
+- ⏰ **Break Reminder**: Notifikasi istirahat mata setiap 20 menit
 - 🎚️ Slider popup untuk kontrol visual (Dimmer + Warm)
 - 💾 **Auto-save** settings (restore saat startup)
 - 🌙 Icon berubah sesuai level brightness
 - 🚀 Support autostart saat login
+
+### 📋 Preset Profiles
+
+Menu cepat untuk set kombinasi brightness & warna yang optimal:
+
+| Profile        | Dimmer   | Warm Filter    | Keterangan                                |
+|----------------|----------|----------------|-------------------------------------------|
+| 🎮 **Gaming**  | 0% (Off) | 5500K (Warm 1) | Bright & clear, minimal blue light filter |
+| 💼 **Work**    | 20%      | 4500K (Warm 2) | Nyaman untuk kerja lama                   |
+| 📖 **Reading** | 40%      | 3500K (Warm 3) | Relaxing, warm tone                       |
+| 🎬 **Movie**   | 40%      | Off            | Warna akurat namun tidak silau            |
+| 🌙 **Night**   | 60%      | 2700K (Warm 4) | Sangat hangat & gelap untuk larut malam   |
 
 ### 🔥 Warm Filter (Blue Light Reduction)
 

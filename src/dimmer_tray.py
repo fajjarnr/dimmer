@@ -63,6 +63,18 @@ WARM_TEMPS = {
     5: 2000,  # Candle light
 }
 
+# Preset profiles: (dimmer_level, warm_level)
+PROFILES = {
+    "gaming": (0, 1, "🎮 Gaming", "Full brightness, slight warm"),
+    "work": (1, 2, "💼 Work", "Light dim, moderate warm"),
+    "reading": (2, 3, "📖 Reading", "Medium dim, warm"),
+    "movie": (2, 0, "🎬 Movie", "Medium dim, neutral colors"),
+    "night": (3, 4, "🌙 Night", "Dark, very warm"),
+}
+
+# Break reminder interval (in minutes)
+BREAK_INTERVAL_MINUTES = 20
+
 
 class DimmerTray:
     """System tray application for dimmer control."""
@@ -73,8 +85,13 @@ class DimmerTray:
         self.slider_window = None
         self.notify_enabled = True  # Show notifications for hotkey changes
         
+        # Break reminder
+        self.break_enabled = False
+        self.break_timer_id = None
+        
         # Load saved settings from config
-        saved_level, saved_warm = self.load_config()
+        saved_level, saved_warm, saved_break = self.load_config()
+        self.break_enabled = saved_break
         
         # Create the indicator
         self.indicator = AppIndicator3.Indicator.new(
@@ -95,6 +112,10 @@ class DimmerTray:
         if saved_warm > 0:
             print(f"[INFO] Restoring saved warm level: {saved_warm}")
             GLib.idle_add(lambda: self.set_warm_level(saved_warm, notify=False))
+        
+        # Start break reminder if enabled
+        if self.break_enabled:
+            self.start_break_timer()
     
     def load_config(self):
         """Load configuration from file."""
@@ -102,10 +123,14 @@ class DimmerTray:
             if os.path.exists(CONFIG_FILE):
                 with open(CONFIG_FILE, 'r') as f:
                     config = json.load(f)
-                    return config.get('level', 0), config.get('warm', 0)
+                    return (
+                        config.get('level', 0),
+                        config.get('warm', 0),
+                        config.get('break_enabled', False)
+                    )
         except Exception as e:
             print(f"[WARN] Failed to load config: {e}")
-        return 0, 0
+        return 0, 0, False
     
     def save_config(self):
         """Save current settings to config file."""
@@ -114,7 +139,8 @@ class DimmerTray:
             with open(CONFIG_FILE, 'w') as f:
                 json.dump({
                     'level': self.current_level,
-                    'warm': self.warm_level
+                    'warm': self.warm_level,
+                    'break_enabled': self.break_enabled
                 }, f)
         except Exception as e:
             print(f"[WARN] Failed to save config: {e}")
@@ -129,6 +155,64 @@ class DimmerTray:
             notification.show()
         except Exception as e:
             print(f"[WARN] Notification failed: {e}")
+    
+    # ========== BREAK REMINDER ==========
+    def start_break_timer(self):
+        """Start the break reminder timer."""
+        if self.break_timer_id:
+            GLib.source_remove(self.break_timer_id)
+        
+        interval_ms = BREAK_INTERVAL_MINUTES * 60 * 1000
+        self.break_timer_id = GLib.timeout_add(interval_ms, self.on_break_reminder)
+        print(f"[INFO] Break reminder started ({BREAK_INTERVAL_MINUTES} min interval)")
+    
+    def stop_break_timer(self):
+        """Stop the break reminder timer."""
+        if self.break_timer_id:
+            GLib.source_remove(self.break_timer_id)
+            self.break_timer_id = None
+        print("[INFO] Break reminder stopped")
+    
+    def on_break_reminder(self):
+        """Called when break reminder triggers."""
+        # Show notification
+        notification = Notify.Notification.new(
+            "👀 Eye Break Reminder",
+            "Time to rest your eyes!\nLook at something 20 feet (6m) away for 20 seconds.",
+            "dialog-information"
+        )
+        notification.set_timeout(10000)  # 10 seconds
+        notification.set_urgency(2)  # Critical
+        notification.show()
+        print("[INFO] Break reminder notification shown")
+        return True  # Return True to keep timer running
+    
+    def toggle_break_reminder(self, widget):
+        """Toggle break reminder on/off."""
+        if isinstance(widget, Gtk.CheckMenuItem):
+            self.break_enabled = widget.get_active()
+        else:
+            self.break_enabled = not self.break_enabled
+        
+        if self.break_enabled:
+            self.start_break_timer()
+            self.show_notification("⏰ Break Reminder", f"Enabled - every {BREAK_INTERVAL_MINUTES} min")
+        else:
+            self.stop_break_timer()
+            self.show_notification("⏰ Break Reminder", "Disabled")
+        
+        self.save_config()
+    
+    # ========== PROFILES ==========
+    def apply_profile(self, profile_name):
+        """Apply a preset profile."""
+        if profile_name not in PROFILES:
+            return
+        
+        dim_level, warm_level, label, desc = PROFILES[profile_name]
+        self.set_dimmer_level(dim_level, notify=False)
+        self.set_warm_level(warm_level, notify=False)
+        self.show_notification(f"{label} Profile", desc)
         
     def build_menu(self):
         """Build the system tray context menu."""
@@ -201,10 +285,33 @@ class DimmerTray:
         
         self.menu.append(Gtk.SeparatorMenuItem())
         
+        # Profiles submenu
+        profiles_menu_item = Gtk.MenuItem(label="📋 Profiles")
+        profiles_submenu = Gtk.Menu()
+        
+        for profile_id, profile_data in PROFILES.items():
+            _, _, label, desc = profile_data
+            item = Gtk.MenuItem(label=f"{label}")
+            item.connect("activate", lambda w, p=profile_id: self.apply_profile(p))
+            profiles_submenu.append(item)
+        
+        profiles_menu_item.set_submenu(profiles_submenu)
+        self.menu.append(profiles_menu_item)
+        
+        self.menu.append(Gtk.SeparatorMenuItem())
+        
         # Slider window option
         slider_item = Gtk.MenuItem(label="🎚️  Open Slider...")
         slider_item.connect("activate", self.on_open_slider)
         self.menu.append(slider_item)
+        
+        self.menu.append(Gtk.SeparatorMenuItem())
+        
+        # Break reminder toggle
+        self.break_menu_item = Gtk.CheckMenuItem(label="⏰ Break Reminder (20 min)")
+        self.break_menu_item.set_active(self.break_enabled)
+        self.break_menu_item.connect("toggled", self.toggle_break_reminder)
+        self.menu.append(self.break_menu_item)
         
         self.menu.append(Gtk.SeparatorMenuItem())
         
