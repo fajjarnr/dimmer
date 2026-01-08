@@ -34,42 +34,43 @@ app = None
 Notify.init("Dimmer")
 
 # Level descriptions for 5-level system (20% steps)
-LEVEL_NAMES = {
-    0: "Off",
-    1: "Light (20%)",
-    2: "Medium (40%)",
-    3: "Dark (60%)",
-    4: "Very Dark (80%)",
-    5: "Ultra (100%)"
+# Level descriptions for 20-level system (5% steps)
+# We won't map every single level to a name, just key ones for the menu
+# 0 = Off, 20 = 100% Dark (Ultra)
+MENU_LEVELS = {
+    0: "Off (0%)",
+    4: "Light (20%)",
+    8: "Medium (40%)",
+    12: "Dark (60%)",
+    16: "Very Dark (80%)",
+    20: "Ultra (100%)"
 }
 
-# Warm filter levels (color temperature)
-WARM_NAMES = {
-    0: "Off (6500K)",
-    1: "Warm 1 (5500K)",
-    2: "Warm 2 (4500K)",
-    3: "Warm 3 (3500K)",
-    4: "Warm 4 (2700K)",
-    5: "Candle (2000K)"
-}
-
-# KDE Night Light temperatures (Kelvin)
-WARM_TEMPS = {
-    0: 6500,  # Neutral (off)
-    1: 5500,  # Slight warm
-    2: 4500,  # Warm
-    3: 3500,  # Warmer
-    4: 2700,  # Very warm
-    5: 2000,  # Candle light
-}
-
-# Preset profiles: (dimmer_level, warm_level)
+# Preset profiles: (dimmer_level [0-20], warm_temp [K], label, desc)
+# Note: dimmer_level 0 = Off (100% bright), 20 = 100% dim (Black)
+# User request: "bright 90%" means 10% dim -> Level 2
+# Wait, let's clarify. Usually "brightness 90%" means 10% dimmed.
+# If my dimmer levels are "how much to DIM", then:
+# 100% Brightness = 0% Dim = Level 0
+# 90% Brightness = 10% Dim = Level 2
+# 85% Brightness = 15% Dim = Level 3
+# 100% Brightness = 0% Dim = Level 0
+# 
+# Let's map based on "Dimming Level" (Opacity):
+# Health: 90% Bright -> 10% Dim -> Level 2
+# Game: 90% Bright -> 10% Dim -> Level 2
+# Movie: 90% Bright -> 10% Dim -> Level 2
+# Office: 85% Bright -> 15% Dim -> Level 3
+# Editing: 100% Bright -> 0% Dim -> Level 0
+# Reading: 85% Bright -> 15% Dim -> Level 3
+#
 PROFILES = {
-    "gaming": (0, 1, "🎮 Gaming", "Full brightness, slight warm"),
-    "work": (1, 2, "💼 Work", "Light dim, moderate warm"),
-    "reading": (2, 3, "📖 Reading", "Medium dim, warm"),
-    "movie": (2, 0, "🎬 Movie", "Medium dim, neutral colors"),
-    "night": (3, 4, "🌙 Night", "Dark, very warm"),
+    "health": (2, 5000, "💚 Health", "5000K, 90% Brightness"),
+    "game": (2, 6500, "🎮 Game", "6500K, 90% Brightness"),
+    "movie": (2, 6000, "🎬 Movie", "6000K, 90% Brightness"),
+    "office": (3, 5500, "💼 Office", "5500K, 85% Brightness"),
+    "editing": (0, 6500, "🖊️ Editing", "6500K, 100% Brightness"),
+    "reading": (3, 5500, "📖 Reading", "5500K, 85% Brightness"),
 }
 
 # Break reminder interval (in minutes)
@@ -209,9 +210,10 @@ class DimmerTray:
         if profile_name not in PROFILES:
             return
         
-        dim_level, warm_level, label, desc = PROFILES[profile_name]
+        # New format: dim_level, warm_temp, label, desc
+        dim_level, warm_temp, label, desc = PROFILES[profile_name]
         self.set_dimmer_level(dim_level, notify=False)
-        self.set_warm_level(warm_level, notify=False)
+        self.set_warm_level(warm_temp, notify=False)
         self.show_notification(f"{label} Profile", desc)
         
     def build_menu(self):
@@ -225,30 +227,32 @@ class DimmerTray:
         
         self.menu.append(Gtk.SeparatorMenuItem())
         
-        # Quick brightness presets - 5 levels with 20% steps
-        item_off = Gtk.MenuItem(label="☀️  Off (No Dimming)")
-        item_off.connect("activate", self.set_level_0)
-        self.menu.append(item_off)
+        # Quick brightness presets (from MENU_LEVELS)
+        # Sort levels to ensure order
+        sorted_levels = sorted(MENU_LEVELS.keys())
         
-        item_light = Gtk.MenuItem(label="🌤️  Light (20%)")
-        item_light.connect("activate", self.set_level_1)
-        self.menu.append(item_light)
-        
-        item_medium = Gtk.MenuItem(label="⛅  Medium (40%)")
-        item_medium.connect("activate", self.set_level_2)
-        self.menu.append(item_medium)
-        
-        item_dark = Gtk.MenuItem(label="🌥️  Dark (60%)")
-        item_dark.connect("activate", self.set_level_3)
-        self.menu.append(item_dark)
-        
-        item_very_dark = Gtk.MenuItem(label="🌙  Very Dark (80%)")
-        item_very_dark.connect("activate", self.set_level_4)
-        self.menu.append(item_very_dark)
-        
-        item_ultra = Gtk.MenuItem(label="🌑  Ultra (100%)")
-        item_ultra.connect("activate", self.set_level_5)
-        self.menu.append(item_ultra)
+        for level in sorted_levels:
+            name = MENU_LEVELS[level]
+            # Add emoji if missing (simple heuristic)
+            if "Off" in name:
+                label = f"☀️  {name}"
+            elif "20%" in name:
+                label = f"🌤️  {name}"
+            elif "40%" in name:
+                label = f"⛅  {name}"
+            elif "60%" in name:
+                label = f"🌥️  {name}"
+            elif "80%" in name:
+                label = f"🌙  {name}"
+            elif "100%" in name:
+                label = f"🌑  {name}"
+            else:
+                label = name
+                
+            item = Gtk.MenuItem(label=label)
+            # Use default arg to capture loop variable
+            item.connect("activate", lambda w, l=level: self.set_dimmer_level(l))
+            self.menu.append(item)
         
         self.menu.append(Gtk.SeparatorMenuItem())
         
@@ -256,29 +260,20 @@ class DimmerTray:
         warm_menu_item = Gtk.MenuItem(label="🔥 Warm Filter")
         warm_submenu = Gtk.Menu()
         
-        warm_off = Gtk.MenuItem(label="❄️  Off (6500K)")
-        warm_off.connect("activate", self.set_warm_0)
-        warm_submenu.append(warm_off)
+        # Define warm presets for menu
+        warm_presets = [
+            (6500, "❄️  Off (6500K)"),
+            (5500, "🌡️  Warm 1 (5500K)"),
+            (4500, "🌡️  Warm 2 (4500K)"),
+            (3500, "🔥  Warm 3 (3500K)"),
+            (2700, "🔥  Warm 4 (2700K)"),
+            (2000, "🕯️  Candle (2000K)")
+        ]
         
-        warm_1 = Gtk.MenuItem(label="🌡️  Warm 1 (5500K)")
-        warm_1.connect("activate", self.set_warm_1)
-        warm_submenu.append(warm_1)
-        
-        warm_2 = Gtk.MenuItem(label="🌡️  Warm 2 (4500K)")
-        warm_2.connect("activate", self.set_warm_2)
-        warm_submenu.append(warm_2)
-        
-        warm_3 = Gtk.MenuItem(label="🔥  Warm 3 (3500K)")
-        warm_3.connect("activate", self.set_warm_3)
-        warm_submenu.append(warm_3)
-        
-        warm_4 = Gtk.MenuItem(label="🔥  Warm 4 (2700K)")
-        warm_4.connect("activate", self.set_warm_4)
-        warm_submenu.append(warm_4)
-        
-        warm_5 = Gtk.MenuItem(label="🕯️  Candle (2000K)")
-        warm_5.connect("activate", self.set_warm_5)
-        warm_submenu.append(warm_5)
+        for temp, label in warm_presets:
+            item = Gtk.MenuItem(label=label)
+            item.connect("activate", lambda w, t=temp: self.set_warm_level(t))
+            warm_submenu.append(item)
         
         warm_menu_item.set_submenu(warm_submenu)
         self.menu.append(warm_menu_item)
@@ -335,46 +330,8 @@ class DimmerTray:
         self.menu.show_all()
         self.indicator.set_menu(self.menu)
     
-    # Individual level setters to avoid closure issues (5 levels)
-    def set_level_0(self, widget):
-        self.set_dimmer_level(0)
-    
-    def set_level_1(self, widget):
-        self.set_dimmer_level(1)
-    
-    def set_level_2(self, widget):
-        self.set_dimmer_level(2)
-    
-    def set_level_3(self, widget):
-        self.set_dimmer_level(3)
-    
-    def set_level_4(self, widget):
-        self.set_dimmer_level(4)
-    
-    def set_level_5(self, widget):
-        self.set_dimmer_level(5)
-    
-    # Warm level setters
-    def set_warm_0(self, widget):
-        self.set_warm_level(0)
-    
-    def set_warm_1(self, widget):
-        self.set_warm_level(1)
-    
-    def set_warm_2(self, widget):
-        self.set_warm_level(2)
-    
-    def set_warm_3(self, widget):
-        self.set_warm_level(3)
-    
-    def set_warm_4(self, widget):
-        self.set_warm_level(4)
-    
-    def set_warm_5(self, widget):
-        self.set_warm_level(5)
-    
     def set_dimmer_level(self, level, notify=False):
-        """Set the dimmer to specified level (0-5)."""
+        """Set the dimmer to specified level (0-20)."""
         print(f"[DEBUG] Setting dimmer level to {level}")
         
         # Kill any existing dimmer process
@@ -384,6 +341,8 @@ class DimmerTray:
         except subprocess.TimeoutExpired:
             pass
         
+        # Clamp level
+        level = max(0, min(20, int(level)))
         self.current_level = level
         
         if level == 0:
@@ -393,8 +352,12 @@ class DimmerTray:
             if notify:
                 self.show_notification("🔆 Dimmer", "Off - Full brightness")
         else:
-            pct = level * 20
-            level_name = LEVEL_NAMES.get(level, f"{pct}%")
+            pct = level * 5
+            # find closest menu name
+            level_name = f"{pct}% Dimmed"
+            if level in MENU_LEVELS:
+                level_name = MENU_LEVELS[level]
+                
             self.status_item.set_label(f"Status: {level_name}")
             
             # Start the dimmer process
@@ -410,10 +373,10 @@ class DimmerTray:
                 print(f"[ERROR] Failed to start dimmer: {e}")
                 return
             
-            # Update icon based on level (5 levels)
-            if level <= 2:
+            # Update icon based on level (20 levels)
+            if level <= 7:
                 self.indicator.set_icon_full("display-brightness-high-symbolic", f"Dimmer {pct}%")
-            elif level <= 3:
+            elif level <= 14:
                 self.indicator.set_icon_full("display-brightness-medium-symbolic", f"Dimmer {pct}%")
             else:
                 self.indicator.set_icon_full("display-brightness-low-symbolic", f"Dimmer {pct}%")
@@ -424,22 +387,24 @@ class DimmerTray:
         # Save level to config
         self.save_config()
     
-    def set_warm_level(self, level, notify=False):
-        """Set the warm filter level (0-5) using KDE Night Light."""
-        print(f"[DEBUG] Setting warm level to {level}")
+    def set_warm_level(self, temp, notify=False):
+        """Set the warm filter temperature (Kelvin)."""
+        print(f"[DEBUG] Setting warm temperature to {temp}K")
         
-        self.warm_level = level
-        temp = WARM_TEMPS.get(level, 6500)
+        self.warm_level = int(temp)
         
         # Use KDE Night Light via qdbus
         try:
-            if level == 0:
+            # 6500K is standard daylight/off. 0 also means off.
+            if temp == 0 or temp >= 6500:
                 # Stop preview (return to normal/scheduled mode)
                 subprocess.run([
                     'qdbus', 'org.kde.KWin', '/org/kde/KWin/NightLight',
                     'org.kde.KWin.NightLight.stopPreview'
                 ], stderr=subprocess.DEVNULL, timeout=5)
                 print("[DEBUG] Stopped Night Light preview")
+                status_text = "Off (6500K)"
+                notif_text = "Off - Neutral colors"
             else:
                 # Preview the temperature
                 subprocess.run([
@@ -447,23 +412,21 @@ class DimmerTray:
                     'org.kde.KWin.NightLight.preview', str(temp)
                 ], stderr=subprocess.DEVNULL, timeout=5)
                 print(f"[DEBUG] Applied Night Light temperature: {temp}K")
+                status_text = f"{temp}K"
+                notif_text = f"Temperature: {temp}K"
+                
         except Exception as e:
             print(f"[ERROR] Failed to set warm filter: {e}")
             return
         
-        warm_name = WARM_NAMES.get(level, f"Level {level}")
-        
         # Update status item
-        if level == 0:
-            self.warm_status_item.set_label("Warm: Off")
-        else:
-            self.warm_status_item.set_label(f"Warm: {warm_name}")
+        self.warm_status_item.set_label(f"Warm: {status_text}")
         
         if notify:
-            if level == 0:
-                self.show_notification("❄️ Warm Filter", "Off - Neutral colors")
+            if temp == 0 or temp >= 6500:
+                self.show_notification("❄️ Warm Filter", notif_text)
             else:
-                self.show_notification("🔥 Warm Filter", warm_name)
+                self.show_notification("🔥 Warm Filter", notif_text)
         
         # Save config
         self.save_config()
@@ -497,6 +460,7 @@ class DimmerTray:
         Gtk.main()
 
 
+
 class SliderWindow(Gtk.Window):
     """Modern UI Slider window matching CareUEyes design."""
     
@@ -508,6 +472,10 @@ class SliderWindow(Gtk.Window):
         self.set_position(Gtk.WindowPosition.CENTER)
         self.set_keep_above(True)
         self.set_resizable(False)
+        
+        # Track active profile for styling
+        self.current_profile_id = None
+        self.preset_buttons = {}
         
         # Apply custom theme
         self.apply_css()
@@ -529,7 +497,7 @@ class SliderWindow(Gtk.Window):
         logo_box.set_margin_start(15)
         
         logo_icon = Gtk.Image.new_from_icon_name("display-brightness-symbolic", Gtk.IconSize.LARGE_TOOLBAR)
-        logo_label = Gtk.Label(label="CareUEyes") # Using the requested name
+        logo_label = Gtk.Label(label="CareUEyes") 
         logo_label.set_markup("<span size='large' weight='bold' color='white'>DimmerEye</span>")
         
         logo_box.pack_start(logo_icon, False, False, 0)
@@ -574,7 +542,7 @@ class SliderWindow(Gtk.Window):
         content_area.get_style_context().add_class("content-area")
         main_hbox.pack_start(content_area, True, True, 0)
         
-        # Title Bar / Header (within content area)
+        # Title Bar / Header
         header_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
         header_box.set_margin_top(10)
         header_box.set_margin_end(10)
@@ -604,6 +572,9 @@ class SliderWindow(Gtk.Window):
         
         # Update timer label
         GLib.timeout_add(1000, self.update_timer_ui)
+        
+        # Check initial profile state
+        self.check_profile_match()
     
     def create_display_page(self):
         page = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=20)
@@ -612,64 +583,75 @@ class SliderWindow(Gtk.Window):
         page.set_margin_top(10)
         page.set_margin_bottom(20)
         
-        # 1. Warm Slider
+        # 1. Warm Slider (Kelvin)
+        # We model this as 0 (Less Warm/6500K) to 100 (More Warm/2000K) for the slider visual
         warm_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
         
         wb_label = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
         wb_label.pack_start(Gtk.Label(label="Color Temperature"), False, False, 0)
-        self.warm_val_label = Gtk.Label(label="6500K")
+        self.warm_val_label = Gtk.Label(label=f"{self.tray_app.warm_level}K")
         self.warm_val_label.get_style_context().add_class("value-tag")
         wb_label.pack_end(self.warm_val_label, False, False, 0)
         warm_box.pack_start(wb_label, False, False, 0)
         
-        self.warm_adj = Gtk.Adjustment(value=self.tray_app.warm_level, lower=0, upper=5, step_increment=1, page_increment=1, page_size=0)
+        # Calculate initial slider pos from Kelvin
+        # Range: 6500 (0%) -> 2000 (100%)
+        # Value = (6500 - Temp) / (6500 - 2000) * 100
+        current_k = self.tray_app.warm_level
+        if current_k == 0: current_k = 6500
+        slider_val = ((6500 - current_k) / 4500) * 100
+        slider_val = max(0, min(100, slider_val))
+        
+        self.warm_adj = Gtk.Adjustment(value=slider_val, lower=0, upper=100, step_increment=1, page_increment=10, page_size=0)
         self.warm_scale = Gtk.Scale(orientation=Gtk.Orientation.HORIZONTAL, adjustment=self.warm_adj)
         self.warm_scale.set_draw_value(False)
         self.warm_scale.get_style_context().add_class("thick-slider")
         self.warm_scale.add_mark(0, Gtk.PositionType.BOTTOM, "Less Warm")
-        self.warm_scale.add_mark(5, Gtk.PositionType.BOTTOM, "More Warm")
+        self.warm_scale.add_mark(100, Gtk.PositionType.BOTTOM, "More Warm")
         self.warm_scale.connect("value-changed", self.on_warm_changed)
         warm_box.pack_start(self.warm_scale, False, False, 0)
         
         page.pack_start(warm_box, False, False, 0)
         
         # 2. Brightness Slider
+        # 0 (Less Bright/Dark) -> 100 (More Bright)
+        # App Level 0 = Bright, 20 = Dark.
+        # Slider 0 = Level 20. Slider 100 = Level 0.
+        # Slider = 100 - (Level * 5)
         dim_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
         
         db_label = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
         db_label.pack_start(Gtk.Label(label="Brightness"), False, False, 0)
-        self.dim_val_label = Gtk.Label(label="100%")
+        
+        curr_pct = 100 - (self.tray_app.current_level * 5)
+        self.dim_val_label = Gtk.Label(label=f"{curr_pct}%")
         self.dim_val_label.get_style_context().add_class("value-tag")
         db_label.pack_end(self.dim_val_label, False, False, 0)
         dim_box.pack_start(db_label, False, False, 0)
         
-        self.dim_adj = Gtk.Adjustment(value=self.tray_app.current_level, lower=0, upper=5, step_increment=1, page_increment=1, page_size=0)
+        self.dim_adj = Gtk.Adjustment(value=curr_pct, lower=0, upper=100, step_increment=5, page_increment=10, page_size=0)
         self.dim_scale = Gtk.Scale(orientation=Gtk.Orientation.HORIZONTAL, adjustment=self.dim_adj)
         self.dim_scale.set_draw_value(False)
         self.dim_scale.get_style_context().add_class("thick-slider")
-        self.dim_scale.add_mark(0, Gtk.PositionType.BOTTOM, "More Bright")
-        self.dim_scale.add_mark(5, Gtk.PositionType.BOTTOM, "Less Bright")
+        self.dim_scale.add_mark(0, Gtk.PositionType.BOTTOM, "Less Bright")
+        self.dim_scale.add_mark(100, Gtk.PositionType.BOTTOM, "More Bright")
         self.dim_scale.connect("value-changed", self.on_dimmer_changed)
         dim_box.pack_start(self.dim_scale, False, False, 0)
         
         page.pack_start(dim_box, False, False, 0)
         
-        # 3. Day/Night & Toggle
+        # 3. Toggle Feature (Dummy)
         toggle_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
         toggle_box.set_halign(Gtk.Align.CENTER)
-        
         toggle_label = Gtk.Label(label="Enable day and night feature")
         toggle_label.get_style_context().add_class("grey-text")
-        
         self.dn_switch = Gtk.Switch()
-        self.dn_switch.set_active(True) # Dummy implementation
-        
+        self.dn_switch.set_active(True)
         toggle_box.pack_start(toggle_label, False, False, 0)
         toggle_box.pack_start(self.dn_switch, False, False, 0)
-        
         page.pack_start(toggle_box, False, False, 10)
         
-        # 4. Preset Grid (FlowBox)
+        # 4. Preset Grid
         flow = Gtk.FlowBox()
         flow.set_valign(Gtk.Align.START)
         flow.set_max_children_per_line(4)
@@ -677,46 +659,47 @@ class SliderWindow(Gtk.Window):
         flow.set_column_spacing(10)
         flow.set_row_spacing(10)
         
-        # Map profiles to buttons
-        presets = [
-            ("Pause", 0, 0, "off"), # Off
-            ("Health", 1, 2, "work"), # Work (Health)
-            ("Game", 0, 1, "gaming"),
-            ("Movie", 2, 0, "movie"),
-            ("Office", 2, 2, "work"), # Similar to Work
-            ("Editing", 1, 1, "gaming"), # Bright
-            ("Reading", 2, 3, "reading"),
-            ("Custom", 0, 0, None) # Placeholder
+        # Requested Profiles
+        # Format: (Label, ProfileID)
+        presets_list = [
+            ("Pause", "pause"),   # Special: Off/Off
+            ("Health", "health"),
+            ("Game", "game"),
+            ("Movie", "movie"),
+            ("Office", "office"),
+            ("Editing", "editing"),
+            ("Reading", "reading"),
+            ("Custom", "custom")
         ]
         
-        for label, d_lvl, w_lvl, prof_id in presets:
+        # "Pause" -> Dim 0 (100%), Warm 6500 (Off)
+        # "Custom" -> Placeholder
+        
+        for label, pid in presets_list:
             btn = Gtk.Button(label=label)
             btn.get_style_context().add_class("preset-btn")
             btn.set_size_request(80, 35)
-            if prof_id == "work": # Highlight Health/Work as example
-                 btn.get_style_context().add_class("preset-active")
-            
-            btn.connect("clicked", self.on_preset_click, d_lvl, w_lvl)
+            btn.connect("clicked", self.on_preset_click, pid)
             flow.add(btn)
+            self.preset_buttons[pid] = btn
             
         page.pack_start(flow, False, False, 0)
         
-        # 5. Description
+        # Description
         desc_label = Gtk.Label(label="Slightly lower color temperature and brightness,\ndarker than office mode, suitable for people who are sensitive to light")
         desc_label.set_justify(Gtk.Justification.CENTER)
         desc_label.get_style_context().add_class("grey-text")
         desc_label.set_max_width_chars(50)
         desc_label.set_line_wrap(True)
-        
         page.pack_start(desc_label, False, False, 10)
         
         self.nav_stack.add_named(page, "display_page")
         
     def create_break_page(self):
         page = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=20)
-        page.get_style_context().add_class("teal-bg-top") # Special background?
+        page.get_style_context().add_class("teal-bg-top")
         
-        # Top Section (Teal Background with Timer)
+        # Timer Display
         timer_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
         timer_box.set_size_request(-1, 200)
         timer_box.get_style_context().add_class("timer-container")
@@ -736,7 +719,7 @@ class SliderWindow(Gtk.Window):
         btn_stop.set_size_request(120, 40)
         btn_stop.connect("clicked", self.on_stop_timer)
         
-        controls_box.pack_start(Gtk.Image.new_from_icon_name("weather-clear-night-symbolic", Gtk.IconSize.DND), False, False, 0) # Coffee icon placeholder
+        controls_box.pack_start(Gtk.Image.new_from_icon_name("weather-clear-night-symbolic", Gtk.IconSize.DND), False, False, 0)
         controls_box.pack_start(btn_stop, False, False, 0)
         controls_box.pack_start(btn_coffee, False, False, 0)
         
@@ -746,13 +729,12 @@ class SliderWindow(Gtk.Window):
         
         page.pack_start(timer_box, False, False, 0)
         
-        # Bottom Section (Settings)
+        # Settings
         mod_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=15)
         mod_box.set_margin_start(40)
         mod_box.set_margin_end(40)
         mod_box.set_margin_top(20)
         
-        # Toggle
         row1 = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
         row1.pack_start(Gtk.Label(label="Break Reminder Enabled"), False, False, 0)
         self.break_switch = Gtk.Switch()
@@ -761,7 +743,6 @@ class SliderWindow(Gtk.Window):
         row1.pack_end(self.break_switch, False, False, 0)
         mod_box.pack_start(row1, False, False, 0)
         
-        # Interval
         row2 = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
         row2.pack_start(Gtk.Label(label="Every"), False, False, 0)
         self.spin_every = Gtk.SpinButton.new_with_range(5, 120, 5)
@@ -885,42 +866,110 @@ class SliderWindow(Gtk.Window):
         return True
 
     def on_dimmer_changed(self, widget):
-        val = int(self.dim_adj.get_value())
-        if self.tray_app.current_level != val:
-            self.tray_app.set_dimmer_level(val)
-            pct = 100 - (val * 20)
-            self.dim_val_label.set_label(f"{pct}%")
+        # Slider is 0-100% Brightness
+        # App expects Level 0 (100% bright) to 20 (0% bright)
+        slider_val = int(self.dim_adj.get_value())
+        
+        # Percentage of brightness: 100% -> Level 0. 0% -> Level 20.
+        # inverted: dim_pct = 100 - slider_val
+        # level = dim_pct / 5
+        dim_pct = 100 - slider_val
+        level = dim_pct / 5
+        
+        # Only apply if changed
+        if abs(self.tray_app.current_level - level) >= 0.1: # float tolerance
+            self.tray_app.set_dimmer_level(int(level))
+            self.dim_val_label.set_label(f"{slider_val}%")
+            self.check_profile_match()
             
     def on_warm_changed(self, widget):
-        val = int(self.warm_adj.get_value())
-        if self.tray_app.warm_level != val:
-            self.tray_app.set_warm_level(val)
-            temps = ["6500K", "5500K", "4500K", "3500K", "2700K", "2000K"]
-            self.warm_val_label.set_label(temps[val])
+        # Slider is 0-100% Warmth
+        # 0% = 6500K, 100% = 2000K
+        slider_val = self.warm_adj.get_value()
+        
+        # Temp = 6500 - (slider * 45) -> 4500 range / 100 = 45
+        temp = 6500 - (slider_val * 45)
+        # Snap to 100s
+        temp = round(temp / 100) * 100
+        
+        if self.tray_app.warm_level != temp:
+            self.tray_app.set_warm_level(int(temp))
+            self.warm_val_label.set_label(f"{int(temp)}K")
+            self.check_profile_match()
 
-    def on_preset_click(self, widget, d_lvl, w_lvl):
-        # Update app
+    def on_preset_click(self, widget, pid):
+        # Set active button styling
+        self.update_active_button(pid)
+        
+        if pid == "custom":
+            return
+            
+        if pid == "pause":
+            d_lvl = 0
+            w_temp = 6500
+        else:
+            if pid in PROFILES:
+                d_lvl, w_temp, _, _ = PROFILES[pid]
+            else:
+                return
+
+        # Apply to app
         self.tray_app.set_dimmer_level(d_lvl)
-        self.tray_app.set_warm_level(w_lvl)
-        # Update sliders
-        self.dim_adj.set_value(d_lvl)
-        self.warm_adj.set_value(w_lvl)
+        self.tray_app.set_warm_level(w_temp)
+        
+        # Update sliders (block signals if possible or let them trigger updates which is fine)
+        self.dim_adj.set_value(100 - (d_lvl * 5))
+        
+        # Update warm slider. Temp -> 0-100?
+        # Val = (6500 - Temp) / 45
+        slider_val = (6500 - w_temp) / 45
+        self.warm_adj.set_value(slider_val)
+        
+    def update_active_button(self, active_pid):
+        for pid, btn in self.preset_buttons.items():
+            ctx = btn.get_style_context()
+            if pid == active_pid:
+                ctx.add_class("preset-active")
+            else:
+                ctx.remove_class("preset-active")
+                
+    def check_profile_match(self):
+        # Check if current setting matches a profile
+        curr_d = self.tray_app.current_level
+        curr_w = self.tray_app.warm_level
+        if curr_w == 0: curr_w = 6500
+        
+        found = False
+        
+        # Check pause
+        if curr_d == 0 and curr_w >= 6500:
+             self.update_active_button("pause")
+             return
+             
+        for pid, data in PROFILES.items():
+            d, w, _, _ = data
+            if curr_d == d and abs(curr_w - w) < 200: # Tolerance for temp
+                self.update_active_button(pid)
+                found = True
+                break
+        
+        if not found:
+            self.update_active_button("custom")
         
     def on_break_toggled(self, switch, state):
         self.tray_app.break_enabled = state
-        self.tray_app.toggle_break_reminder(None) # Pass none or handle appropriately in tray_app
+        self.tray_app.toggle_break_reminder(None)
         
     def on_stop_timer(self, widget):
-        # Just reset to 20 mins for visual, logic is in tray app
         self.tray_app.stop_break_timer()
         self.break_switch.set_active(False)
 
     def update_timer_ui(self):
-        # Simple countdown logic for visual if timer is active
-        # In a real app, query tray_app for remaining time
         if self.tray_app.break_enabled:
-            # Fake decrement for demo
-            self.timer_display.set_markup("<span font_features='tnum'>00:19:59</span>")
+            # Simplistic countdown visualization
+            import time
+            remaining = "20:00" # Placeholder
+            self.timer_display.set_markup(f"<span font_features='tnum'>{remaining}</span>")
         else:
             self.timer_display.set_label("00:20:00")
         return True
